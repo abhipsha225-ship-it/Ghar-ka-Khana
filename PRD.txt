@@ -1,0 +1,135 @@
+# Ghar Ka Khana (Grandma's Kitchen) - AI Code Generation PRD
+
+**System Prompt for AI Generator:**
+*You are an expert Flutter and Firebase developer. Build a complete, production-ready, cross-platform mobile application based on the following Product Requirements Document. Implement clean architecture, robust state management (Provider or Riverpod), and pixel-perfect UI matching the specified design system.*
+
+## 1. Project Overview
+
+* **App Name:** Ghar Ka Khana (UI Display Name: Grandma's Kitchen)
+* **Platform:** Flutter (iOS & Android)
+* **Backend:** Firebase (Firestore, Firebase Auth, Cloud Messaging)
+* **Core Concept:** A direct-to-consumer food delivery app designed for a single elderly chef ("Grandma") to sell home-cooked meals to young working professionals.
+* **Architecture:** The project contains two distinct user interfaces within the same codebase, routed by user role:
+1. **Customer App:** Minimalist, smooth, and focused on quick ordering.
+2. **Admin Dashboard (Grandma's App):** Highly accessible, massive touch targets, simplified states.
+
+
+
+## 2. Design System & Aesthetics
+
+The UI must be clean, minimalist, and slightly nostalgic. It relies on a structural, outlined card aesthetic (similar to clean wireframes) with soft interactive elements.
+
+* **Color Palette:**
+* Primary Text/Icons: Charcoal Black (`#1C1C1E`)
+* Background: Pure White (`#FFFFFF`)
+* Secondary Background (Cards): Off-White (`#F9F9F9`)
+* Borders/Dividers: Light Grey (`#E5E5EA`)
+* Accent/Action: Terracotta/Warm Orange (`#D85C27`) - *Use sparingly for primary buttons or active states.*
+
+
+* **Typography:** 'Inter' or 'Poppins' (Google Fonts).
+* Headings: Medium/Semi-Bold (500-600 weight).
+* Body: Regular (400 weight), Grey (`#666666`).
+
+
+* **Component Styling:**
+* Cards: Border width `1.0`, Border color `#E5E5EA`, Border radius `12px`, Elevation `0` (flat design).
+* Buttons: Height `56px`, Border radius `12px`.
+* Icons: Use rounded, outlined Material Icons (e.g., `Icons.soup_kitchen_outlined`).
+
+
+
+## 3. Database Schema (Firestore)
+
+**Collection: `menu_items**`
+
+* `id` (String, document ID)
+* `title` (String)
+* `subtitle` (String)
+* `price` (Number)
+* `icon_name` (String, mapping to Material Icons)
+* `is_available` (Boolean, toggleable by Admin)
+
+**Collection: `orders**`
+
+* `id` (String, document ID)
+* `user_id` (String)
+* `items` (Array of Map: `item_id`, `title`, `quantity`, `price`)
+* `subtotal` (Number)
+* `delivery_charge` (Number)
+* `total` (Number)
+* `delivery_type` (String: "Pickup" | "Home Delivery")
+* `status` (String: "Order Received" | "Preparing" | "Ready" | "Out for Delivery" | "Delivered")
+* `timestamp` (Timestamp)
+
+## 4. Customer App: Screen Flows & Requirements
+
+### 4.1 Home Screen (Today's Menu)
+
+* **App Bar:** Hamburger menu (left), Title ("Grandma's Kitchen"), Notifications (right).
+* **Header:** Greeting text ("Good Evening! What would you like to eat today?") inside an outlined rounded container.
+* **Menu List:** Vertically scrollable list of available `menu_items`.
+* Each item card contains a leading circular icon, title, subtitle, price, and a unified `[-] [Qty] [+]` stepper.
+
+
+* **Floating Action:** Sticky bottom banner displaying "View Cart (X Items)" with an icon. Only visible when cart `totalItems > 0`.
+* **Bottom Navigation:** Home, Orders, Favourites, Profile.
+
+### 4.2 Cart & Checkout Screen
+
+* **Itemized List:** Displays selected items with their exact quantity steppers, calculated price, and a delete (trash) icon.
+* **Bill Summary:** Outlined section detailing Subtotal, Delivery Charge (calculates as ₹40 if Home Delivery, ₹0 if Pickup), and Total.
+* **Delivery Options:** Two radio buttons for "Pickup" and "Home Delivery" with estimated time subtitles.
+* **Action:** Primary outlined button "Continue to Checkout".
+
+### 4.3 Secure Checkout (Simulated)
+
+* **UI:** Displays "Amount to Pay" prominently.
+* **Options:** List of mock payment methods (UPI, Credit Card, Net Banking) rendered as bordered list tiles with trailing chevron icons.
+* **Action:** "Pay ₹[Total] & Place Order". Triggers a 2-second loading state, clears the cart state, writes the `Order` to Firestore, and routes to Order Tracking.
+
+### 4.4 Order Tracking Screen
+
+* **Header:** Displays Order ID and formatted Timestamp.
+* **Timeline UI:** A vertical, connected timeline indicating order status.
+* States: Order Received $\rightarrow$ Preparing $\rightarrow$ Ready $\rightarrow$ Out for Delivery $\rightarrow$ Delivered.
+* Completed states have a solid black circle with a white checkmark and black connecting lines.
+* Pending states have an outlined grey circle and grey connecting lines.
+
+
+* **Footer:** A card showing "Estimated Time: 25 minutes" with a delivery scooter icon.
+
+## 5. Admin App (Grandma's Dashboard): Screen Flows & Requirements
+
+*Crucial: This module must enforce strict accessibility (a11y) standards. High contrast, text scale factor strictly > 1.2, minimum touch targets 64x64.*
+
+### 5.1 Active Orders Screen (Default Route)
+
+* **UI:** Massive text. Auto-refreshes listening to Firestore `orders` where status is not "Delivered".
+* **Order Card:** Displays Customer Name, Delivery Type, and a bold list of items.
+* **Status Progression:** Single, massive button at the bottom of each order card that updates the status linearly:
+* `[Accept Order]` $\rightarrow$ changes status to "Preparing".
+* `[Mark as Ready]` $\rightarrow$ changes status to "Ready".
+
+
+* **Audio Alerts:** Trigger a local chime/sound whenever a new document is added to the `orders` collection.
+
+### 5.2 Inventory Toggle Screen
+
+* **UI:** A simplified list of all `menu_items`.
+* **Action:** Massive, color-coded Switch/Toggle widgets next to each dish.
+* Switch ON (Green): Dish is visible on Customer App.
+* Switch OFF (Red): Dish is hidden/sold out, preventing new orders.
+
+
+Issues and Corrections required:
+
+Grandma side
+1. Duplicate entires in the Inventory are still there
+
+Customer side
+Mostly fixed
+
+To add in future
+Profiles to sign up and login for Customer
+
