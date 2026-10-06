@@ -70,6 +70,12 @@ class MenuProvider extends ChangeNotifier {
     });
   }
 
+  Future<void> updateQuantityLeft(String id, int newQuantity) async {
+    await _db.collection('menu_items').doc(id).update({
+      'quantity_left': newQuantity,
+    });
+  }
+
   Future<void> addMenuItem(MenuItemModel item) async {
     await _db.collection('menu_items').add(item.toMap());
   }
@@ -134,8 +140,12 @@ class OrdersProvider extends ChangeNotifier {
     return docRef.id;
   }
 
-  Future<void> updateOrderStatus(String id, String newStatus) async {
-    await _db.collection('orders').doc(id).update({'status': newStatus});
+  Future<void> updateOrderStatus(String id, String newStatus, {String? declineReason}) async {
+    final data = {'status': newStatus};
+    if (declineReason != null) {
+      data['decline_reason'] = declineReason;
+    }
+    await _db.collection('orders').doc(id).update(data);
   }
 }
 

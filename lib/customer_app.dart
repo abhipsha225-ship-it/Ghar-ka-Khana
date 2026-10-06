@@ -70,8 +70,15 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
   }
 }
 
-class CustomerHomeScreen extends StatelessWidget {
+class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({Key? key}) : super(key: key);
+
+  @override
+  State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
+}
+
+class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
+  String _selectedCategory = 'All';
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +142,8 @@ class CustomerHomeScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final menu = menuProv.availableItems;
+          final allCategories = ['All', ...menuProv.availableItems.map((e) => e.category).toSet().toList()];
+          final menu = menuProv.availableItems.where((item) => _selectedCategory == 'All' || item.category == _selectedCategory).toList();
 
           return Stack(
             children: [
@@ -175,6 +183,35 @@ class CustomerHomeScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    SizedBox(
+                      height: 40,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: allCategories.length,
+                        itemBuilder: (context, index) {
+                          final cat = allCategories[index];
+                          final isSelected = cat == _selectedCategory;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: ChoiceChip(
+                              label: Text(cat),
+                              selected: isSelected,
+                              selectedColor: const Color(0xFFD85C27),
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : const Color(0xFF1C1C1E),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              onSelected: (selected) {
+                                setState(() {
+                                  _selectedCategory = cat;
+                                });
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     const Text(
                       'Today\'s Menu',
                       style: TextStyle(
@@ -309,6 +346,15 @@ class CustomerHomeScreen extends StatelessWidget {
                     color: Color(0xFF666666),
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  '⏱ ${item.estimatedTime}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFD85C27),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -355,12 +401,23 @@ class CustomerHomeScreen extends StatelessWidget {
                   ),
                 ),
                 InkWell(
-                  onTap: () => cartProv.updateQuantity(item.id, 1),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
+                  onTap: () {
+                    if (qty < item.quantityLeft) {
+                      cartProv.updateQuantity(item.id, 1);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Only ${item.quantityLeft} left!')),
+                      );
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Text(
                       '+',
-                      style: TextStyle(fontSize: 18, color: Color(0xFF1C1C1E)),
+                      style: TextStyle(
+                        fontSize: 18, 
+                        color: qty < item.quantityLeft ? const Color(0xFF1C1C1E) : Colors.grey,
+                      ),
                     ),
                   ),
                 ),
@@ -856,22 +913,27 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           final orderList = ordersProv.customerOrders
               .where((o) => o.id == widget.orderId)
               .toList();
-          if (orderList.isEmpty)
+          if (orderList.isEmpty) {
             return const Center(child: CircularProgressIndicator());
+          }
 
           final order = orderList.first;
-          final statusList = [
-            'Order Received',
-            'Preparing',
-            'Ready',
-            'Out for Delivery',
-            'Delivered',
-          ];
-          final currentStatusIndex = statusList.indexOf(order.status);
+          final isDeclined = order.status == 'Declined';
+          final statusList = isDeclined 
+              ? ['Order Received', 'Declined'] 
+              : [
+                  'Order Received',
+                  'Preparing',
+                  'Ready',
+                  'Out for Delivery',
+                  'Delivered',
+                ];
+          final currentStatusIndex = isDeclined ? 1 : statusList.indexOf(order.status);
 
           return Padding(
             padding: const EdgeInsets.all(24.0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -897,60 +959,96 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                 const Divider(color: Color(0xFFE5E5EA)),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: Column(
-                    children: statusList.asMap().entries.map((entry) {
-                      final idx = entry.key;
-                      final status = entry.value;
-                      final isCompleted = idx <= currentStatusIndex;
-                      final isLast = idx == statusList.length - 1;
-                      return _buildTimelineItem(status, isCompleted, isLast);
-                    }).toList(),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFE5E5EA)),
-                    borderRadius: BorderRadius.circular(12),
-                    color: const Color(0xFFF9F9F9),
-                  ),
-                  child: Row(
+                  child: ListView(
                     children: [
-                      const Icon(
-                        Icons.schedule,
-                        color: Color(0xFF666666),
-                        size: 28,
-                      ),
-                      const SizedBox(width: 16),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Estimated Time',
-                            style: TextStyle(
-                              color: Color(0xFF666666),
-                              fontSize: 12,
-                            ),
+                      ...statusList.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final status = entry.value;
+                        final isCompleted = isDeclined ? idx == 0 : idx <= currentStatusIndex;
+                        final isLast = idx == statusList.length - 1;
+                        return _buildTimelineItem(status, isCompleted, isLast, isDeclined: isDeclined && isLast);
+                      }).toList(),
+                      
+                      if (isDeclined && order.declineReason != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16, bottom: 32),
+                          child: Text(
+                            'Reason: ${order.declineReason}',
+                            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16),
                           ),
-                          Text(
-                            '25 minutes',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1C1C1E),
-                            ),
-                          ),
-                        ],
+                        ),
+
+                      const SizedBox(height: 32),
+                      const Text(
+                        'Items Ordered',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1C1C1E),
+                        ),
                       ),
-                      const Spacer(),
-                      const Icon(
-                        Icons.two_wheeler,
-                        size: 32,
-                        color: Color(0xFF1C1C1E),
-                      ),
+                      const SizedBox(height: 16),
+                      ...order.items.map((item) {
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('${item['quantity']}x ${item['title']}'),
+                          subtitle: Text('₹${item['price']}'),
+                          trailing: order.status == 'Delivered'
+                              ? OutlinedButton(
+                                  onPressed: () => _showRatingDialog(context, item),
+                                  child: const Text('Rate'),
+                                )
+                              : null,
+                        );
+                      }).toList(),
                     ],
                   ),
                 ),
+                if (!isDeclined && order.status != 'Delivered')
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFE5E5EA)),
+                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFFF9F9F9),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.schedule,
+                          color: Color(0xFF666666),
+                          size: 28,
+                        ),
+                        const SizedBox(width: 16),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Estimated Time',
+                              style: TextStyle(
+                                color: Color(0xFF666666),
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              '25 minutes',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1C1C1E),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        const Icon(
+                          Icons.two_wheeler,
+                          size: 32,
+                          color: Color(0xFF1C1C1E),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           );
@@ -959,7 +1057,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     );
   }
 
-  Widget _buildTimelineItem(String title, bool isCompleted, bool isLast) {
+  Widget _buildTimelineItem(String title, bool isCompleted, bool isLast, {bool isDeclined = false}) {
     return IntrinsicHeight(
       child: Row(
         children: [
@@ -972,23 +1070,21 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   height: 24,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isCompleted ? const Color(0xFF1C1C1E) : Colors.white,
+                    color: isDeclined ? Colors.red : (isCompleted ? const Color(0xFF1C1C1E) : Colors.white),
                     border: Border.all(
-                      color: isCompleted
-                          ? const Color(0xFF1C1C1E)
-                          : const Color(0xFFE5E5EA),
+                      color: isDeclined ? Colors.red : (isCompleted ? const Color(0xFF1C1C1E) : const Color(0xFFE5E5EA)),
                       width: 2,
                     ),
                   ),
-                  child: isCompleted
-                      ? const Icon(Icons.check, size: 16, color: Colors.white)
-                      : null,
+                  child: isDeclined 
+                      ? const Icon(Icons.close, size: 16, color: Colors.white)
+                      : (isCompleted ? const Icon(Icons.check, size: 16, color: Colors.white) : null),
                 ),
                 if (!isLast)
                   Expanded(
                     child: Container(
                       width: 2,
-                      color: isCompleted
+                      color: isCompleted || isDeclined
                           ? const Color(0xFF1C1C1E)
                           : const Color(0xFFE5E5EA),
                     ),
@@ -1005,14 +1101,53 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
-                  color: isCompleted
+                  color: isDeclined ? Colors.red : (isCompleted
                       ? const Color(0xFF1C1C1E)
-                      : const Color(0xFF666666),
+                      : const Color(0xFF666666)),
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showRatingDialog(BuildContext context, Map<String, dynamic> item) {
+    int rating = 5;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Rate ${item['title']}'),
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(5, (index) {
+              return IconButton(
+                icon: Icon(
+                  index < rating ? Icons.star : Icons.star_border,
+                  color: Colors.amber,
+                ),
+                onPressed: () {
+                  setState(() {
+                    rating = index + 1;
+                  });
+                },
+              );
+            }),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                // Here we would typically save the rating to Firestore
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thanks for your rating!')));
+                Navigator.pop(ctx);
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -126,10 +126,17 @@ Issues and Corrections required:
 
 Grandma side
 1. Duplicate entires in the Inventory are still there
-
+2. add a quantity left to each item to prevent overordering
+3, add a declline order button along with accept order which also includes a reason which can be informed to the custoer via the notification
 Customer side
-Mostly fixed
+1. add an estimated time of finishing for the individual dishes
+2. Notification system is not working still
+3. make differecnt catagories of foods and let there be a filter to do that
+4. When someone clicks an order in the orders tab let it sh0w the various food itmes that they ordered and let them rate those items.
 
 To add in future
 Profiles to sign up and login for Customer
-
+Combo options like rice and dal or other things
+Rating system by the customer for various food items
+Feedback forum
+AI chatbot for customer care

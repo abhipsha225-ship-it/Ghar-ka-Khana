@@ -156,37 +156,119 @@ class ActiveOrdersScreen extends StatelessWidget {
                 ),
               )
               .toList(),
-          const SizedBox(height: 32),
-          SizedBox(
-            width: double.infinity,
-            height: 80, // Massive touch target
-            child: ElevatedButton(
-              onPressed: () {
-                if (order.status == 'Order Received') {
-                  provider.updateOrderStatus(order.id, 'Preparing');
-                } else if (order.status == 'Preparing') {
-                  provider.updateOrderStatus(order.id, 'Ready');
-                } else if (order.status == 'Ready') {
-                  provider.updateOrderStatus(order.id, 'Out for Delivery');
-                } else if (order.status == 'Out for Delivery') {
-                  provider.updateOrderStatus(order.id, 'Delivered');
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _getButtonColor(order.status),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+          if (order.status == 'Order Received')
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 80,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        _showDeclineDialog(context, order.id, provider);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'DECLINE',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              child: Text(
-                _getButtonText(order.status),
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: SizedBox(
+                    height: 80,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        provider.updateOrderStatus(order.id, 'Preparing');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD85C27),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'ACCEPT',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else
+            SizedBox(
+              width: double.infinity,
+              height: 80, // Massive touch target
+              child: ElevatedButton(
+                onPressed: () {
+                  if (order.status == 'Preparing') {
+                    provider.updateOrderStatus(order.id, 'Ready');
+                  } else if (order.status == 'Ready') {
+                    provider.updateOrderStatus(order.id, 'Out for Delivery');
+                  } else if (order.status == 'Out for Delivery') {
+                    provider.updateOrderStatus(order.id, 'Delivered');
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _getButtonColor(order.status),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: Text(
+                  _getButtonText(order.status),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeclineDialog(BuildContext context, String orderId, OrdersProvider provider) {
+    final reasonCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Decline Order'),
+        content: TextField(
+          controller: reasonCtrl,
+          decoration: const InputDecoration(labelText: 'Reason for declining'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (reasonCtrl.text.isNotEmpty) {
+                provider.updateOrderStatus(orderId, 'Declined', declineReason: reasonCtrl.text);
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Decline Order'),
           ),
         ],
       ),
@@ -269,13 +351,41 @@ class InventoryToggleScreen extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        item.title,
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1C1C1E),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1C1C1E),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline, size: 32),
+                                onPressed: () {
+                                  if (item.quantityLeft > 0) {
+                                    menuProv.updateQuantityLeft(item.id, item.quantityLeft - 1);
+                                  }
+                                },
+                              ),
+                              Text(
+                                'Qty: ${item.quantityLeft}',
+                                style: const TextStyle(fontSize: 20),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.add_circle_outline, size: 32),
+                                onPressed: () {
+                                  menuProv.updateQuantityLeft(item.id, item.quantityLeft + 1);
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                     Transform.scale(

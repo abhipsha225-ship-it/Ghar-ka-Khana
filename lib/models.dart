@@ -7,6 +7,9 @@ class MenuItemModel {
   final int price;
   final String iconName;
   final bool isAvailable;
+  final int quantityLeft;
+  final String estimatedTime;
+  final String category;
 
   MenuItemModel({
     required this.id,
@@ -15,6 +18,9 @@ class MenuItemModel {
     required this.price,
     required this.iconName,
     required this.isAvailable,
+    this.quantityLeft = 10,
+    this.estimatedTime = '15 mins',
+    this.category = 'General',
   });
 
   factory MenuItemModel.fromFirestore(DocumentSnapshot doc) {
@@ -26,6 +32,9 @@ class MenuItemModel {
       price: data['price'] ?? 0,
       iconName: data['icon_name'] ?? 'soup_kitchen_outlined',
       isAvailable: data['is_available'] ?? true,
+      quantityLeft: data['quantity_left'] ?? 10,
+      estimatedTime: data['estimated_time'] ?? '15 mins',
+      category: data['category'] ?? 'General',
     );
   }
 
@@ -36,6 +45,9 @@ class MenuItemModel {
       'price': price,
       'icon_name': iconName,
       'is_available': isAvailable,
+      'quantity_left': quantityLeft,
+      'estimated_time': estimatedTime,
+      'category': category,
     };
   }
 }
@@ -50,6 +62,7 @@ class OrderModel {
   final String deliveryType;
   final String status;
   final DateTime timestamp;
+  final String? declineReason;
 
   OrderModel({
     required this.id,
@@ -61,6 +74,7 @@ class OrderModel {
     required this.deliveryType,
     required this.status,
     required this.timestamp,
+    this.declineReason,
   });
 
   factory OrderModel.fromFirestore(DocumentSnapshot doc) {
@@ -75,6 +89,7 @@ class OrderModel {
       deliveryType: data['delivery_type'] ?? 'Pickup',
       status: data['status'] ?? 'Order Received',
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      declineReason: data['decline_reason'],
     );
   }
 
@@ -88,6 +103,7 @@ class OrderModel {
       'delivery_type': deliveryType,
       'status': status,
       'timestamp': Timestamp.fromDate(timestamp),
+      if (declineReason != null) 'decline_reason': declineReason,
     };
   }
 }
