@@ -116,7 +116,7 @@ class RoleSelectionScreen extends StatelessWidget {
                 height: 64,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.push(
+                    Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const CustomerAuthWrapper(),
@@ -145,7 +145,7 @@ class RoleSelectionScreen extends StatelessWidget {
                 height: 64,
                 child: OutlinedButton(
                   onPressed: () {
-                    Navigator.push(
+                    Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const AdminAuthWrapper(),

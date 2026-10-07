@@ -125,21 +125,19 @@ The UI must be clean, minimalist, and slightly nostalgic. It relies on a structu
 Issues and Corrections required:
 
 Grandma side
-1. let the grandman see the rating for her each order hence add a completed order tab which shows the rating of all the items, or show NR if no rating
+1. Upon pressing the back button, it is logging out instead of going to home, let the logout button be separate
 
 Customer side
-1. Notifications are not sent on the notification button, let the order updates be present in the notification panel
-2. Add a small rate button beside each order and also send a rate order notification once order is delivered.
-3. Rating button is not working properly, you cant properly select a star, please fix that.
+1. Upon pressing the back button, it is logging out instead of going to home,let the logout button be separate
+2. when rating an item, after rating it, let the start be shows beside the food item.
+3. After deliverry it is giving the delivery notification constantly like a loop, please fix that.
 
 Account System issues:
-1. i am getting the following error "Admin account creation skipped: [firebase_auth/configuration-not-found] Error", i can neither login as grandma nor sign up as a customer
 
 To add in future
 Combo options like rice and dal or other things
-Rating system by the customer for various food items
 Feedback forum
 AI chatbot for customer care
 
-      • Email: grandma@gharkakhana.com
-      • Password: grandmapassword123
+Email: grandma@gharkakhana.com
+Password: grandmapassword123

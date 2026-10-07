@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'models.dart';
 import 'providers.dart';
 import 'seed_db.dart';
+import 'main.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -32,32 +33,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       body = const InventoryToggleScreen();
     }
 
-    return Scaffold(
-        body: body,
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF1C1C1E),
-          unselectedItemColor: Colors.grey,
-          selectedFontSize: 20,
-          unselectedFontSize: 18,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.list_alt, size: 32),
-              label: 'Active',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.check_circle_outline, size: 32),
-              label: 'Completed',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.inventory, size: 32),
-              label: 'Inventory',
-            ),
-          ],
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setState(() => _currentIndex = 0);
+        }
+      },
+      child: Scaffold(
+          body: body,
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (index) => setState(() => _currentIndex = index),
+            backgroundColor: Colors.white,
+            selectedItemColor: const Color(0xFF1C1C1E),
+            unselectedItemColor: Colors.grey,
+            selectedFontSize: 20,
+            unselectedFontSize: 18,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.list_alt, size: 32),
+                label: 'Active',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.check_circle_outline, size: 32),
+                label: 'Completed',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.inventory, size: 32),
+                label: 'Inventory',
+              ),
+            ],
+          ),
         ),
-      );
+    );
   }
 }
 
@@ -86,7 +96,10 @@ class ActiveOrdersScreen extends StatelessWidget {
             onPressed: () async {
               final nav = Navigator.of(context, rootNavigator: true);
               await Provider.of<AuthProvider>(context, listen: false).signOut();
-              nav.pop();
+              nav.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
+                (route) => false,
+              );
             },
           ),
           const SizedBox(width: 16),

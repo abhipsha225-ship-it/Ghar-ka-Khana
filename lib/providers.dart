@@ -175,8 +175,15 @@ class OrdersProvider extends ChangeNotifier {
         .listen((snapshot) {
           for (var change in snapshot.docChanges) {
             if (change.type == DocumentChangeType.modified) {
-              SystemSound.play(SystemSoundType.alert);
               final order = OrderModel.fromFirestore(change.doc);
+              
+              // Check if status actually changed (prevent loop on rating updates)
+              final oldOrderIndex = _customerOrders.indexWhere((o) => o.id == order.id);
+              if (oldOrderIndex != -1 && _customerOrders[oldOrderIndex].status == order.status) {
+                continue; 
+              }
+
+              SystemSound.play(SystemSoundType.alert);
               final msg = order.status == 'Declined' 
                   ? 'Order #${order.id.substring(0, 6).toUpperCase()} was declined. Reason: ${order.declineReason}' 
                   : 'Order #${order.id.substring(0, 6).toUpperCase()} status updated to: ${order.status}';

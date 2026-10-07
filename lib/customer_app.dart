@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'models.dart';
 import 'providers.dart';
+import 'main.dart';
 
 // Helper to map string to IconData
 IconData getIconFromString(String name) {
@@ -53,22 +54,31 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
         body = const ProfileScreen();
     }
 
-    return Scaffold(
-      body: body,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFF1C1C1E),
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_outlined), label: 'Cart'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
-          BottomNavigationBarItem(icon: Icon(Icons.favorite_border), label: 'Favourites'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
-        ],
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setState(() => _currentIndex = 0);
+        }
+      },
+      child: Scaffold(
+        body: body,
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF1C1C1E),
+          unselectedItemColor: Colors.grey,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_outlined), label: 'Cart'),
+            BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
+            BottomNavigationBarItem(icon: Icon(Icons.favorite_border), label: 'Favourites'),
+            BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
+          ],
+        ),
       ),
     );
   }
@@ -1036,10 +1046,19 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                           title: Text('${item['quantity']}x ${item['title']}'),
                           subtitle: Text('₹${item['price']}'),
                           trailing: order.status == 'Delivered'
-                              ? OutlinedButton(
-                                  onPressed: () => _showRatingDialog(context, item, order.id),
-                                  child: const Text('Rate'),
-                                )
+                              ? (item['rating'] != null
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.star, color: Colors.amber, size: 20),
+                                        const SizedBox(width: 4),
+                                        Text('${item['rating']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                      ],
+                                    )
+                                  : OutlinedButton(
+                                      onPressed: () => _showRatingDialog(context, item, order.id),
+                                      child: const Text('Rate'),
+                                    ))
                               : null,
                         );
                       }).toList(),
@@ -1611,7 +1630,10 @@ class ProfileScreen extends StatelessWidget {
             onTap: () async {
               final nav = Navigator.of(context, rootNavigator: true);
               await authProv.signOut();
-              nav.pop();
+              nav.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
+                (route) => false,
+              );
             },
           ),
         ],
