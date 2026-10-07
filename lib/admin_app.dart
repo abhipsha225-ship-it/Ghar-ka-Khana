@@ -18,14 +18,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void initState() {
     super.initState();
     Provider.of<OrdersProvider>(context, listen: false).listenToActiveOrders();
+    Provider.of<OrdersProvider>(context, listen: false).listenToCompletedOrders();
   }
 
   @override
   Widget build(BuildContext context) {
+    Widget body;
+    if (_currentIndex == 0) {
+      body = const ActiveOrdersScreen();
+    } else if (_currentIndex == 1) {
+      body = const CompletedOrdersScreen();
+    } else {
+      body = const InventoryToggleScreen();
+    }
+
     return Scaffold(
-        body: _currentIndex == 0
-            ? const ActiveOrdersScreen()
-            : const InventoryToggleScreen(),
+        body: body,
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) => setState(() => _currentIndex = index),
@@ -37,7 +45,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.list_alt, size: 32),
-              label: 'Orders',
+              label: 'Active',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.check_circle_outline, size: 32),
+              label: 'Completed',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.inventory, size: 32),
@@ -68,6 +80,17 @@ class ActiveOrdersScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         toolbarHeight: 80,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.red, size: 32),
+            onPressed: () async {
+              final nav = Navigator.of(context, rootNavigator: true);
+              await Provider.of<AuthProvider>(context, listen: false).signOut();
+              nav.pop();
+            },
+          ),
+          const SizedBox(width: 16),
+        ],
       ),
       body: Consumer<OrdersProvider>(
         builder: (context, ordersProv, child) {
@@ -292,6 +315,105 @@ class ActiveOrdersScreen extends StatelessWidget {
   }
 }
 
+class CompletedOrdersScreen extends StatelessWidget {
+  const CompletedOrdersScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          'Completed Orders',
+          style: TextStyle(
+            color: Color(0xFF1C1C1E),
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        toolbarHeight: 80,
+      ),
+      body: Consumer<OrdersProvider>(
+        builder: (context, ordersProv, child) {
+          if (ordersProv.completedAdminOrders.isEmpty) {
+            return const Center(
+              child: Text(
+                'No Completed Orders',
+                style: TextStyle(fontSize: 24, color: Color(0xFF666666)),
+              ),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(16.0),
+            itemCount: ordersProv.completedAdminOrders.length,
+            itemBuilder: (context, index) {
+              final order = ordersProv.completedAdminOrders[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF9F9F9),
+                  border: Border.all(color: const Color(0xFFE5E5EA), width: 2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Order #${order.id.substring(0, 6).toUpperCase()}',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1C1C1E),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: Color(0xFF1C1C1E), thickness: 2),
+                    const SizedBox(height: 16),
+                    ...order.items.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${item['quantity']}x ${item['title']}',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  color: Color(0xFF1C1C1E),
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                const Icon(Icons.star, color: Colors.amber, size: 24),
+                                const SizedBox(width: 4),
+                                Text(
+                                  item['rating'] != null ? '${item['rating']}' : 'NR',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ).toList(),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 class InventoryToggleScreen extends StatelessWidget {
   const InventoryToggleScreen({Key? key}) : super(key: key);
 
@@ -455,6 +577,89 @@ class InventoryToggleScreen extends StatelessWidget {
           )
         ],
       )
+    );
+  }
+}
+class AdminAuthWrapper extends StatelessWidget {
+  const AdminAuthWrapper({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, authProv, child) {
+        if (authProv.isAuthenticated) {
+          return const AdminDashboardScreen();
+        } else {
+          return const AdminLoginScreen();
+        }
+      },
+    );
+  }
+}
+
+class AdminLoginScreen extends StatefulWidget {
+  const AdminLoginScreen({Key? key}) : super(key: key);
+  @override
+  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
+}
+
+class _AdminLoginScreenState extends State<AdminLoginScreen> {
+  final emailCtrl = TextEditingController();
+  final passCtrl = TextEditingController();
+  bool _isLoading = false;
+  bool _obscurePass = true;
+
+  void _login() async {
+    setState(() => _isLoading = true);
+    final authProv = Provider.of<AuthProvider>(context, listen: false);
+    final errorMsg = await authProv.signIn(emailCtrl.text.trim(), passCtrl.text.trim());
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (errorMsg != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Admin Login')),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.admin_panel_settings, size: 80, color: Color(0xFFD85C27)),
+            const SizedBox(height: 24),
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Admin Email', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passCtrl, 
+              obscureText: _obscurePass, 
+              decoration: InputDecoration(
+                labelText: 'Password', 
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _login,
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1C1C1E)),
+                child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Login as Grandma', style: TextStyle(color: Colors.white, fontSize: 18)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

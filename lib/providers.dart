@@ -1,7 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'models.dart';
+import 'main.dart'; // added to access scaffoldMessengerKey
+
+class AuthProvider extends ChangeNotifier {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  User? _user;
+  
+  User? get user => _user;
+  bool get isAuthenticated => _user != null;
+
+  AuthProvider() {
+    _auth.authStateChanges().listen((User? user) {
+      _user = user;
+      notifyListeners();
+    });
+  }
+
+  Future<String?> signIn(String email, String password) async {
+    try {
+      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return e.message ?? 'Authentication failed.';
+    } catch (e) {
+      return 'An unknown error occurred.';
+    }
+  }
+
+  Future<String?> signUp(String email, String password) async {
+    try {
+      await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        return 'Account already exists for this email.';
+      } else if (e.code == 'weak-password') {
+        return 'Password is too weak. Please use at least 6 characters.';
+      } else if (e.code == 'invalid-email') {
+        return 'The email address is not valid.';
+      }
+      return e.message ?? 'Registration failed.';
+    } catch (e) {
+      return 'Error while trying to sign up: ${e.toString()}';
+    }
+  }
+
+  Future<void> signOut() async {
+    await _auth.signOut();
+  }
+}
 
 class CartProvider extends ChangeNotifier {
   final Map<String, int> _items = {};
@@ -56,9 +106,24 @@ class MenuProvider extends ChangeNotifier {
 
   MenuProvider() {
     _db.collection('menu_items').snapshots().listen((snapshot) {
-      _menuItems = snapshot.docs
+      // Deduplicate by title to fix duplicate entries issue
+      final allItems = snapshot.docs
           .map((doc) => MenuItemModel.fromFirestore(doc))
           .toList();
+      
+      final Map<String, MenuItemModel> uniqueItems = {};
+      for (var item in allItems) {
+        if (!uniqueItems.containsKey(item.title)) {
+          uniqueItems[item.title] = item;
+        } else {
+          // Keep the one that is available if duplicates exist
+          if (item.isAvailable && !uniqueItems[item.title]!.isAvailable) {
+            uniqueItems[item.title] = item;
+          }
+        }
+      }
+      
+      _menuItems = uniqueItems.values.toList();
       _isLoading = false;
       notifyListeners();
     });
@@ -89,6 +154,17 @@ class OrdersProvider extends ChangeNotifier {
 
   List<OrderModel> get customerOrders => _customerOrders;
   List<OrderModel> get activeAdminOrders => _activeAdminOrders;
+  List<String> get notifications {
+    return _customerOrders.map((order) {
+      if (order.status == 'Delivered') {
+        return 'Your Order #${order.id.substring(0, 6).toUpperCase()} has been delivered! Please rate your items.';
+      } else if (order.status == 'Declined') {
+        return 'Order #${order.id.substring(0, 6).toUpperCase()} was declined. Reason: ${order.declineReason}';
+      } else {
+        return 'Order #${order.id.substring(0, 6).toUpperCase()} is currently: ${order.status}';
+      }
+    }).toList();
+  }
 
   // For customer - fetch user's orders
   void listenToUserOrders(String userId) {
@@ -100,7 +176,14 @@ class OrdersProvider extends ChangeNotifier {
           for (var change in snapshot.docChanges) {
             if (change.type == DocumentChangeType.modified) {
               SystemSound.play(SystemSoundType.alert);
-              // In a real app, this would trigger a local push notification
+              final order = OrderModel.fromFirestore(change.doc);
+              final msg = order.status == 'Declined' 
+                  ? 'Order #${order.id.substring(0, 6).toUpperCase()} was declined. Reason: ${order.declineReason}' 
+                  : 'Order #${order.id.substring(0, 6).toUpperCase()} status updated to: ${order.status}';
+              
+              scaffoldMessengerKey.currentState?.showSnackBar(
+                SnackBar(content: Text(msg), duration: const Duration(seconds: 4)),
+              );
             }
           }
           _customerOrders = snapshot.docs
@@ -146,6 +229,38 @@ class OrdersProvider extends ChangeNotifier {
       data['decline_reason'] = declineReason;
     }
     await _db.collection('orders').doc(id).update(data);
+  }
+
+  List<OrderModel> _completedAdminOrders = [];
+  List<OrderModel> get completedAdminOrders => _completedAdminOrders;
+
+  void listenToCompletedOrders() {
+    _db
+        .collection('orders')
+        .where('status', isEqualTo: 'Delivered')
+        .snapshots()
+        .listen((snapshot) {
+          _completedAdminOrders = snapshot.docs
+              .map((doc) => OrderModel.fromFirestore(doc))
+              .toList();
+          _completedAdminOrders.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          notifyListeners();
+        });
+  }
+
+  Future<void> rateOrderItem(String orderId, String itemId, int rating) async {
+    final docRef = _db.collection('orders').doc(orderId);
+    final doc = await docRef.get();
+    if (doc.exists) {
+      final items = List<Map<String, dynamic>>.from(doc.data()?['items'] ?? []);
+      for (var i = 0; i < items.length; i++) {
+        if (items[i]['item_id'] == itemId) {
+          items[i]['rating'] = rating;
+          break;
+        }
+      }
+      await docRef.update({'items': items});
+    }
   }
 }
 

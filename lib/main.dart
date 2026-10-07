@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -8,12 +9,23 @@ import 'customer_app.dart';
 import 'admin_app.dart';
 import 'firebase_options.dart';
 
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: 'grandma@gharkakhana.com',
+        password: 'grandmapassword123'
+      );
+      debugPrint('Admin account created successfully.');
+    } catch (e) {
+      debugPrint('Admin account creation skipped: $e');
+    }
   } catch (e) {
     debugPrint("Firebase initialization failed or not configured: $e");
   }
@@ -21,6 +33,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => MenuProvider()),
         ChangeNotifierProvider(create: (_) => OrdersProvider()),
@@ -37,6 +50,7 @@ class GharKaKhanaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: scaffoldMessengerKey,
       title: 'Grandma\'s Kitchen',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -102,10 +116,10 @@ class RoleSelectionScreen extends StatelessWidget {
                 height: 64,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushReplacement(
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const CustomerAppScreen(),
+                        builder: (context) => const CustomerAuthWrapper(),
                       ),
                     );
                   },
@@ -131,10 +145,10 @@ class RoleSelectionScreen extends StatelessWidget {
                 height: 64,
                 child: OutlinedButton(
                   onPressed: () {
-                    Navigator.pushReplacement(
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const AdminDashboardScreen(),
+                        builder: (context) => const AdminAuthWrapper(),
                       ),
                     );
                   },

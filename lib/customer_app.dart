@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'models.dart';
 import 'providers.dart';
 
@@ -45,8 +46,11 @@ class _CustomerAppScreenState extends State<CustomerAppScreen> {
       case 3:
         body = const FavouritesScreen();
         break;
+      case 4:
+        body = const ProfileScreen();
+        break;
       default:
-        body = const Center(child: Text("Profile (Coming Soon)"));
+        body = const ProfileScreen();
     }
 
     return Scaffold(
@@ -98,18 +102,34 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none, color: Color(0xFF1C1C1E)),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Notifications'),
-                  content: const Text('You have no new notifications right now.'),
-                  actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
-                ),
-              );
-            },
+          Consumer<OrdersProvider>(
+            builder: (context, ordersProv, child) => IconButton(
+              icon: const Icon(Icons.notifications_none, color: Color(0xFF1C1C1E)),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Notifications'),
+                    content: SizedBox(
+                      width: double.maxFinite,
+                      child: ordersProv.notifications.isEmpty
+                          ? const Text('You have no new notifications right now.')
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: ordersProv.notifications.length,
+                              itemBuilder: (context, index) {
+                                return ListTile(
+                                  leading: const Icon(Icons.info_outline),
+                                  title: Text(ordersProv.notifications[index]),
+                                );
+                              },
+                            ),
+                    ),
+                    actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -620,10 +640,24 @@ class _CartScreenState extends State<CartScreen> {
                   ),
                 ),
                 InkWell(
-                  onTap: () => cartProv.updateQuantity(item.id, 1),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Text('+', style: TextStyle(fontSize: 16)),
+                  onTap: () {
+                    if (qty < item.quantityLeft) {
+                      cartProv.updateQuantity(item.id, 1);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Only ${item.quantityLeft} left!')),
+                      );
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      '+', 
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: qty < item.quantityLeft ? const Color(0xFF1C1C1E) : Colors.grey,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -740,7 +774,7 @@ class _PaymentGatewayScreenState extends State<PaymentGatewayScreen> {
 
     final order = OrderModel(
       id: '', // Firebase will generate
-      userId: 'test_user_123',
+      userId: Provider.of<AuthProvider>(context, listen: false).user?.uid ?? 'test_user_123',
       items: orderItems,
       subtotal: widget.subtotal,
       deliveryCharge: widget.deliveryCharge,
@@ -752,6 +786,14 @@ class _PaymentGatewayScreenState extends State<PaymentGatewayScreen> {
 
     await Future.delayed(const Duration(seconds: 2));
     final orderId = await ordersProv.placeOrder(order);
+    
+    // Decrement quantity left for each item
+    for (var id in cartProv.items.keys) {
+      final m = menuProv.menuItems.firstWhere((element) => element.id == id);
+      final newQty = (m.quantityLeft - cartProv.items[id]!).clamp(0, 9999);
+      await menuProv.updateQuantityLeft(m.id, newQty);
+    }
+    
     cartProv.clear();
 
     if (mounted) {
@@ -888,7 +930,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     Provider.of<OrdersProvider>(
       context,
       listen: false,
-    ).listenToUserOrders('test_user_123');
+    ).listenToUserOrders(Provider.of<AuthProvider>(context, listen: false).user?.uid ?? 'test_user_123');
   }
 
   @override
@@ -995,7 +1037,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                           subtitle: Text('₹${item['price']}'),
                           trailing: order.status == 'Delivered'
                               ? OutlinedButton(
-                                  onPressed: () => _showRatingDialog(context, item),
+                                  onPressed: () => _showRatingDialog(context, item, order.id),
                                   child: const Text('Rate'),
                                 )
                               : null,
@@ -1113,23 +1155,24 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     );
   }
 
-  void _showRatingDialog(BuildContext context, Map<String, dynamic> item) {
+  void _showRatingDialog(BuildContext context, Map<String, dynamic> item, String orderId) {
     int rating = 5;
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, setInnerState) => AlertDialog(
           title: Text('Rate ${item['title']}'),
           content: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: List.generate(5, (index) {
               return IconButton(
+                iconSize: 40,
                 icon: Icon(
                   index < rating ? Icons.star : Icons.star_border,
                   color: Colors.amber,
                 ),
                 onPressed: () {
-                  setState(() {
+                  setInnerState(() {
                     rating = index + 1;
                   });
                 },
@@ -1139,10 +1182,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () {
-                // Here we would typically save the rating to Firestore
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thanks for your rating!')));
-                Navigator.pop(ctx);
+              onPressed: () async {
+                await Provider.of<OrdersProvider>(context, listen: false)
+                    .rateOrderItem(orderId, item['item_id'], rating);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thanks for your rating!')));
+                  Navigator.pop(ctx);
+                }
               },
               child: const Text('Submit'),
             ),
@@ -1164,7 +1210,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
   @override
   void initState() {
     super.initState();
-    Provider.of<OrdersProvider>(context, listen: false).listenToUserOrders('test_user_123');
+    Provider.of<OrdersProvider>(context, listen: false).listenToUserOrders(Provider.of<AuthProvider>(context, listen: false).user?.uid ?? 'test_user_123');
   }
 
   @override
@@ -1199,7 +1245,21 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                 child: ListTile(
                   title: Text('Order #${order.id.substring(0, 6).toUpperCase()}'),
                   subtitle: Text(order.status),
-                  trailing: const Icon(Icons.chevron_right),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (order.status == 'Delivered')
+                        TextButton(
+                          onPressed: () {
+                            Navigator.push(context, MaterialPageRoute(
+                              builder: (_) => OrderTrackingScreen(orderId: order.id),
+                            ));
+                          },
+                          child: const Text('Rate', style: TextStyle(color: Color(0xFFD85C27))),
+                        ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
                   onTap: () {
                     Navigator.push(context, MaterialPageRoute(
                       builder: (_) => OrderTrackingScreen(orderId: order.id),
@@ -1330,6 +1390,324 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+class CustomerAuthWrapper extends StatelessWidget {
+  const CustomerAuthWrapper({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, authProv, child) {
+        if (authProv.isAuthenticated) {
+          return const CustomerAppScreen();
+        } else {
+          return const CustomerLoginScreen();
+        }
+      },
+    );
+  }
+}
+
+class CustomerLoginScreen extends StatefulWidget {
+  const CustomerLoginScreen({Key? key}) : super(key: key);
+  @override
+  State<CustomerLoginScreen> createState() => _CustomerLoginScreenState();
+}
+
+class _CustomerLoginScreenState extends State<CustomerLoginScreen> {
+  final emailCtrl = TextEditingController();
+  final passCtrl = TextEditingController();
+  bool _isLoading = false;
+  bool _obscurePass = true;
+
+  void _login() async {
+    setState(() => _isLoading = true);
+    final authProv = Provider.of<AuthProvider>(context, listen: false);
+    final errorMsg = await authProv.signIn(emailCtrl.text.trim(), passCtrl.text.trim());
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (errorMsg != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Login')),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.soup_kitchen_outlined, size: 80, color: Color(0xFFD85C27)),
+            const SizedBox(height: 24),
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passCtrl, 
+              obscureText: _obscurePass, 
+              decoration: InputDecoration(
+                labelText: 'Password', 
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _login,
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1C1C1E)),
+                child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Login', style: TextStyle(color: Colors.white, fontSize: 18)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerSignUpScreen()));
+              },
+              child: const Text('New user? Create an account', style: TextStyle(color: Color(0xFFD85C27))),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CustomerSignUpScreen extends StatefulWidget {
+  const CustomerSignUpScreen({Key? key}) : super(key: key);
+  @override
+  State<CustomerSignUpScreen> createState() => _CustomerSignUpScreenState();
+}
+
+class _CustomerSignUpScreenState extends State<CustomerSignUpScreen> {
+  final emailCtrl = TextEditingController();
+  final passCtrl = TextEditingController();
+  final confirmPassCtrl = TextEditingController();
+  bool _isLoading = false;
+  bool _obscurePass = true;
+  bool _obscureConfirmPass = true;
+
+  void _signUp() async {
+    if (passCtrl.text.trim() != confirmPassCtrl.text.trim()) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwords do not match!')));
+      return;
+    }
+    
+    setState(() => _isLoading = true);
+    final authProv = Provider.of<AuthProvider>(context, listen: false);
+    final errorMsg = await authProv.signUp(emailCtrl.text.trim(), passCtrl.text.trim());
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (errorMsg == null) {
+        Navigator.pop(context); // Go back to login/app after signup
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create an Account')),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passCtrl, 
+              obscureText: _obscurePass, 
+              decoration: InputDecoration(
+                labelText: 'Password', 
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: confirmPassCtrl, 
+              obscureText: _obscureConfirmPass, 
+              decoration: InputDecoration(
+                labelText: 'Confirm Password', 
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureConfirmPass ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscureConfirmPass = !_obscureConfirmPass),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _signUp,
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1C1C1E)),
+                child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Sign Up', style: TextStyle(color: Colors.white, fontSize: 18)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final authProv = Provider.of<AuthProvider>(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile', style: TextStyle(color: Color(0xFF1C1C1E))),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+      ),
+      backgroundColor: Colors.white,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Icon(Icons.account_circle, size: 100, color: Color(0xFF1C1C1E)),
+          const SizedBox(height: 16),
+          Text(
+            authProv.user?.email ?? 'User',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 32),
+          ListTile(
+            leading: const Icon(Icons.forum_outlined),
+            title: const Text('Feedback Forum'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const FeedbackForumScreen()));
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Logout', style: TextStyle(color: Colors.red)),
+            onTap: () async {
+              final nav = Navigator.of(context, rootNavigator: true);
+              await authProv.signOut();
+              nav.pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class FeedbackForumScreen extends StatefulWidget {
+  const FeedbackForumScreen({Key? key}) : super(key: key);
+  @override
+  State<FeedbackForumScreen> createState() => _FeedbackForumScreenState();
+}
+
+class _FeedbackForumScreenState extends State<FeedbackForumScreen> {
+  final _msgCtrl = TextEditingController();
+
+  void _submitFeedback() async {
+    if (_msgCtrl.text.isEmpty) return;
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    await FirebaseFirestore.instance.collection('feedbacks').add({
+      'user_email': user?.email ?? 'Anonymous',
+      'message': _msgCtrl.text,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    _msgCtrl.clear();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Feedback submitted!')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Feedback Forum'),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('feedbacks').orderBy('timestamp', descending: true).snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) return const Center(child: Text('No feedback yet. Be the first!'));
+                return ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      color: const Color(0xFFF9F9F9),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        side: const BorderSide(color: Color(0xFFE5E5EA)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListTile(
+                        title: Text(data['message'] ?? ''),
+                        subtitle: Text(data['user_email'] ?? ''),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Color(0xFFE5E5EA))),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _msgCtrl,
+                    decoration: const InputDecoration(
+                      hintText: 'Share your feedback...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Color(0xFFD85C27)),
+                  onPressed: _submitFeedback,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
